@@ -238,7 +238,8 @@ class ParticleFilter:
 
         # Propagate motion of each particle
         ######### Your code starts here #########
-
+        x = x + delta_x*math.cos(delta_theta)
+        y = y + delta_y*math.sin(delta_theta)
         ######### Your code ends here #########
 
     def measure(self, z: float, scan_angle_in_rad: float):
@@ -412,19 +413,19 @@ if __name__ == "__main__":
             uinput = input("")
             if uinput == "w": # forward
                 ######### Your code starts here #########
-
+                controller.forward_action(1.0)
                 ######### Your code ends here #########
             elif uinput == "a": # left
                 ######### Your code starts here #########
-
+                controller.rotate_action(pi/2)
                 ######### Your code ends here #########
             elif uinput == "d": #right
                 ######### Your code starts here #########
-
+                controller.rotate_action(-pi/2)
                 ######### Your code ends here #########
             elif uinput == "s": # backwards
                 ######### Your code starts here #########
-
+                controller.forward_action(-1.0)
                 ######### Your code ends here #########
             else:
                 print("Invalid input")
