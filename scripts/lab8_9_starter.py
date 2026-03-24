@@ -222,7 +222,8 @@ class ParticleFilter:
 
         # Propagate motion of each particle
         ######### Your code starts here #########
-
+        x = x + delta_x*math.cos(delta_theta)
+        y = y + delta_y*math.sin(delta_theta)
         ######### Your code ends here #########
 
     def measure(self, z: float, scan_angle_in_rad: float):
