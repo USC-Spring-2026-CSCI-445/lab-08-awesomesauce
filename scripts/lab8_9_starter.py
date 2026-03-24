@@ -432,8 +432,26 @@ class Controller:
     def rotate_action(self, goal_theta: float):
         # Robot turns by a set amount during manual control
         ######### Your code starts here #########
+        theta_error = float
+        rate = rospy.Rate(20)  # 20 Hz
+        ctrl_msg = Twist()
 
-        x = 0 # delete me - needed to compile with ths function empty
+        while not rospy.is_shutdown():
+            v = -1 * self.angular_PID.control(theta_error, rospy.get_rostime())
+            ctrl_msg.angular.z = v
+            print("ang", theta_error, v)
+
+            if abs(theta_error) < 0.05:
+                break
+
+            self.robot_ctrl_pub.publish(ctrl_msg)
+            rate.sleep()
+
+        ctrl_msg.linear.x = 0
+        ctrl_msg.angular.z = 0
+        self.robot_ctrl_pub.publish(ctrl_msg)
+        print("DONE")
+        
 
         ######### Your code ends here #########
 
