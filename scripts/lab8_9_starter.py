@@ -190,6 +190,22 @@ class ParticleFilter:
 
         # Initialize uniformly-distributed particles
         ######### Your code starts here #########
+        x_max, y_max = map.top_right()
+        x_min, y_min = map.bottom_left()
+        x_center = (x_min + x_max) / 2
+        y_center = (y_min + y_max) / 2
+        x_sigma = (x_max - x_min) / 2
+        y_sigma = (y_max - y_min) / 2
+        self.particles = []
+        for _ in (n_particles):
+            x = np.random.normal(x_center, x_sigma)
+            y = np.random.normal(y_center, y_sigma)
+            theta = np.random.normal(0, np.pi)
+
+
+            x = np.clip(x, x_min, x_max)
+            y = np.clip(y, y_min, y_max)
+            self.particles.append(Particle(x, y, 0))
 
         ######### Your code ends here #########
 
@@ -235,12 +251,30 @@ class ParticleFilter:
 
         # Calculate posterior probabilities and resample
         ######### Your code starts here #########
+        for p in self.particles:
+            expected = map.closest_distance((p.x, p.y), p.theta + scan_angle_in_rad)
+            error = z - expected
+            prob = scipy.stats.norm(0, measurement_variance).pdf(error)
+            p.log_p += np.log(prob + 1e-9)
 
+        weights = np.array([exp(p.log_p) for p in particles])
+        weights /= np.sum(weights)
+
+        new_particles = random.choices(self.particles, weights=weights, k=len(self.particles))
+        self.particles = new_particles
         ######### Your code ends here #########
 
     def get_estimate(self) -> Tuple[float, float, float]:
         # Estimate robot's location using particle weights
-        ######### Your code starts here #########
+        ######### Your code starts here ########
+        weights = np.array([np.exp(p.log_p) for p in particles])
+        weights /= np.sum(weights)
+
+        x = sum(p.x * w for p, w in zip(self.particles, weights))
+        y = sum(p.y * w for p, w in zip(self.particles, weights))
+        theta = sum(p.theta * w for p, w in zip(self.particles, weights))
+
+        return x, y, theta
 
         ######### Your code ends here #########
 
