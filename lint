@@ -1,0 +1,3 @@
+echo "_____________"
+echo "Running black"
+python3.8 -m black scripts/*.py --line-length=120 --target-version=py38 --preview
