@@ -223,7 +223,7 @@ class ParticleFilter:
         # Propagate motion of each particle
         ######### Your code starts here #########
         #for each particle
-        for p in self._particles
+        for p in self._particles: 
             p.x = p.x + delta_x*math.cos(delta_theta)
             p.y = p.y + delta_y*math.sin(delta_theta)
         ######### Your code ends here #########
