@@ -160,7 +160,56 @@ class Map:
 
 # PID controller class
 ######### Your code starts here #########
+class PIDController:
+    """
+    Generates control action taking into account instantaneous error (proportional action),
+    accumulated error (integral action) and rate of change of error (derivative action).
+    """
+    def __init__(self, kP, kD, kI, i_min, i_max, u_min, u_max):
+        assert u_min < u_max, "u_min should be less than u_max"
+        assert i_min < i_max, "i_min should be less than i_max"
 
+        self.p = 0.0
+        self.i = 0.0
+        self.d = 0.0
+
+        self.kP = kP
+        self.kD = kD
+        self.kI = kI
+
+        self.i_min = i_min
+        self.i_max = i_max
+        self.u_min = u_min
+        self.u_max = u_max
+
+        self.t_prev = None
+        self.e_prev = 0.0
+
+    def clamp(self, raw, floor, ceil):
+        return floor if raw < floor else (ceil if raw > ceil else raw)
+
+    def control(self, err, t):
+        if (self.t_prev is None):
+            self.t_prev = t
+            return 0
+
+        dt = t - self.t_prev
+        self.t_prev = t
+
+        if dt <= rospy.Duration.from_sec(1e-10):
+            return 0
+
+        de = err - self.e_prev
+        dt = dt.to_sec()
+        self.e_prev = err
+
+        self.p = self.kP * err
+        self.i += self.kI * (err * dt)        
+        self.i = self.clamp(self.i, self.i_min, self.i_max)
+        self.d = self.kD * (de/dt)
+
+        output = self.p + self.i + self.d
+        return self.clamp(output, self.u_min, self.u_max)
 ######### Your code ends here #########
 
 
@@ -245,6 +294,8 @@ class ParticleFilter:
         # Estimate robot's location using particle weights
         ######### Your code starts here #########
 
+        x = 0 # delete me - needed to compile with ths function empty
+
         ######### Your code ends here #########
 
 
@@ -319,6 +370,8 @@ class Controller:
         # NOTE: with more than 2 angles the particle filter will converge too quickly, so with high likelihood the
         # correct neighborhood won't be found.
 
+        x = 0 # delete me - needed to compile with ths function empty
+
         ######### Your code ends here #########
 
     def autonomous_exploration(self):
@@ -337,13 +390,32 @@ class Controller:
     def forward_action(self, distance: float):
         # Robot moves forward by a set amount during manual control
         ######### Your code starts here #########
+        distance_error = float
+        rate = rospy.Rate(20)  # 20 Hz
+        ctrl_msg = Twist()
 
+        while not rospy.is_shutdown():
+            v = -1 * self.linear_PID.control(distance_error, rospy.get_rostime())
+            ctrl_msg.linear.x = v
+            print("lin", distance_error, v)
+
+            if abs(distance_error) < 0.05:
+                break
+
+            self.robot_ctrl_pub.publish(ctrl_msg)
+            rate.sleep()
+
+        ctrl_msg.linear.x = 0
+        ctrl_msg.angular.z = 0
+        self.robot_ctrl_pub.publish(ctrl_msg)
+        print("DONE")
         ######### Your code ends here #########
 
     def rotate_action(self, goal_theta: float):
         # Robot turns by a set amount during manual control
         ######### Your code starts here #########
 
+        x = 0 # delete me - needed to compile with ths function empty
 
         ######### Your code ends here #########
 
@@ -381,7 +453,7 @@ if __name__ == "__main__":
             uinput = input("")
             if uinput == "w": # forward
                 ######### Your code starts here #########
-                controller.forward_action(1.0)
+                controller.forward_action(0.5)
                 ######### Your code ends here #########
             elif uinput == "a": # left
                 ######### Your code starts here #########
@@ -393,7 +465,7 @@ if __name__ == "__main__":
                 ######### Your code ends here #########
             elif uinput == "s": # backwards
                 ######### Your code starts here #########
-                controller.forward_action(-1.0)
+                controller.forward_action(0.5)
                 ######### Your code ends here #########
             else:
                 print("Invalid input")
