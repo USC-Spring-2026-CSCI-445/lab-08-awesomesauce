@@ -284,17 +284,35 @@ class ParticleFilter:
             z: distance to an obstacle
             scan_angle_in_rad: Angle in the robots frame where the scan was taken
         """
-
+        weights = []
         # Calculate posterior probabilities and resample
         ######### Your code starts here #########
-        pdfThing = scipy.stats.pdf(x,z,)
+        for p in self._particles: 
+            expected_z = self.map.ray_cast(p, scan_angle_in_rad) #
+            error = z - expected_z
+            weight = scipy.stats.norm(0, measurement_variance).pdf(error)
+            weights.append(weight)
+        total = sum(weights)
+        weights = [w / total for w in weights]
+        indices = np.random.choice(len(self.particles), size=len(self.particles), p=weights)
+        self.particles = [self.particles[i] for i in indices]
         ######### Your code ends here #########
 
     def get_estimate(self) -> Tuple[float, float, float]:
         # Estimate robot's location using particle weights
         ######### Your code starts here #########
+        x = 0
+        y = 0
+        theta = 0
 
-        x = 0 # delete me - needed to compile with ths function empty
+        n = len(self.particles)
+
+        for p in self.particles:
+            x += p.x
+            y += p.y
+            theta += p.theta
+
+        return (x / n, y / n, theta / n)
 
         ######### Your code ends here #########
 
