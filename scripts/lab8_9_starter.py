@@ -552,7 +552,7 @@ class Controller:
             ctrl_msg.linear.x = v
             print("lin", distance_error, v)
 
-            if abs(distance_error) < 0.05:
+            if abs(distance_error) < 0.1:
                 break
 
             self.robot_ctrl_pub.publish(ctrl_msg)
@@ -580,7 +580,7 @@ class Controller:
             ctrl_msg.angular.z = v
             print("ang", theta_error, v)
 
-            if abs(theta_error) < 0.05:
+            if abs(theta_error) < 0.1:
                 break
 
             self.robot_ctrl_pub.publish(ctrl_msg)
