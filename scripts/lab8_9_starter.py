@@ -239,14 +239,34 @@ class ParticleFilter:
 
         # Initialize uniformly-distributed particles
         ######### Your code starts here #########
+        self.sigma_d = translation_variance
+        self.sigma_theta = rotation_variance
+        self.sigma_s = measurement_variance
 
+
+        x_min, y_min = self.map_.bottom_left()
+        x_max, y_max = self.map_.top_right()
+        x_center = (x_min + x_max) / 2
+        y_center = (y_min + y_max) / 2
+        x_sigma = (x_max - x_min) / 2
+        y_sigma = (y_max - y_min) / 2
+
+        self.particles = []
+        for _ in range(n_particles):
+            x = np.random.normal(x_center, x_sigma)
+            y = np.random.normal(y_center, y_sigma)
+            theta = np.random.normal(0, np.pi)
+
+            x = np.clip(x, x_min, x_max)
+            y = np.clip(y, y_min, y_max)
+            self.particles.append(Particle(x, y, theta, 0))
         ######### Your code ends here #########
 
     def visualize_particles(self):
         pa = PoseArray()
         pa.header.frame_id = "odom"
         pa.header.stamp = rospy.Time.now()
-        for particle in self._particles:
+        for particle in self.particles:
             pose = Pose()
             pose.position = Point(particle.x, particle.y, 0.01)
             q_np = quaternion_from_euler(0, 0, float(particle.theta))
@@ -267,14 +287,18 @@ class ParticleFilter:
         self.estimate_visualization_pub.publish(ps)
 
     def move_by(self, delta_x, delta_y, delta_theta):
-        delta_theta = angle_to_neg_pi_to_pi(delta_theta)
 
         # Propagate motion of each particle
         ######### Your code starts here #########
-        #for each particle
-        for p in self._particles: 
-            p.x = p.x + delta_x*math.cos(delta_theta)
-            p.y = p.y + delta_y*math.sin(delta_theta)
+        for p in self.particles: 
+            dx_noise = delta_x + np.random.normal(0, self.sigma_d)
+            dy_noise = delta_y + np.random.normal(0, self.sigma_d)
+            d_theta_noise = delta_theta + np.random.normal(0, self.sigma_theta)
+
+            p.x = p.x + dx_noise*math.cos(delta_theta)
+            p.y = p.y + dy_noise*math.sin(delta_theta)
+            p.theta += d_theta_noise
+            p.theta = angle_to_neg_pi_to_pi(p.theta)
         ######### Your code ends here #########
 
     def measure(self, z: float, scan_angle_in_rad: float):
@@ -287,7 +311,7 @@ class ParticleFilter:
         weights = []
         # Calculate posterior probabilities and resample
         ######### Your code starts here #########
-        for p in self._particles: 
+        for p in self.particles: 
             expected_z = self.map.ray_cast(p, scan_angle_in_rad) #
             error = z - expected_z
             weight = scipy.stats.norm(0, measurement_variance).pdf(error)
