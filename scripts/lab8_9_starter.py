@@ -360,8 +360,8 @@ class Controller:
         self._particle_filter = particle_filter
         self._particle_filter.visualize_particles()
 
-        self.angular_PID = PIDController(1, 0.2, 0.01, -1, 1, -1 * MAX_ROT_VEL, MAX_ROT_VEL)
-        self.linear_PID = PIDController(1, 0.5, 0.00, -0.3, 0.3, -1 * MAX_LIN_VEL, MAX_LIN_VEL)
+        self.angular_PID = PIDController(0.5, 0.2, 0.01, -1, 1, -1 * MAX_ROT_VEL, MAX_ROT_VEL)
+        self.linear_PID = PIDController(0.5, 0.5, 0.00, -0.3, 0.3, -1 * MAX_LIN_VEL, MAX_LIN_VEL)
 
         #
         rate = rospy.Rate(20)  # 20 Hz
@@ -548,54 +548,79 @@ class Controller:
     def forward_action(self, distance: float):
         # Robot moves forward by a set amount during manual control
         ######### Your code starts here #########
-        distance_error = distance
-        rate = rospy.Rate(20)  # 20 Hz
         ctrl_msg = Twist()
+        rate = rospy.Rate(20)  # 20 Hz
+        start_x = self.current_position["x"]
+        start_y = self.current_position["y"]
+        prev_x = start_x
+        prev_y = start_y
 
         while not rospy.is_shutdown():
-            v = -1 * self.linear_PID.control(distance_error, rospy.get_rostime())
-            ctrl_msg.linear.x = v
-            print("lin", distance_error, v)
-
-            if abs(distance_error) < 0.1:
+            curr_x = self.current_position["x"]
+            curr_y = self.current_position["y"]
+            traveled = abs(math.sqrt((curr_x - start_x) ** 2 + (curr_y - start_y) ** 2))
+            error = distance - traveled if distance > 0 else traveled - distance
+            if abs(error) < 0.1:
                 break
 
+            v = self.linear_PID.control(error, rospy.get_rostime())
+            ctrl_msg.linear.x = v
+            ctrl_msg.linear.z = 0.0
+            print("lin", error, v)
             self.robot_ctrl_pub.publish(ctrl_msg)
+
+            dx = curr_x - prev_x
+            dy = curr_y - prev_y
+            dtheta = 0
+            self._particle_filter.move_by(dx, dy, dtheta)
+
+            prev_x = curr_x
+            prev_y = curr_y
+
             rate.sleep()
 
+        print("DONE")
         ctrl_msg.linear.x = 0
         ctrl_msg.angular.z = 0
         self.robot_ctrl_pub.publish(ctrl_msg)
-        print("DONE")
         ######### Your code ends here #########
 
     def rotate_action(self, goal_theta: float):
         # Robot turns by a set amount during manual control
         ######### Your code starts here #########
-        theta_error = goal_theta
-        rate = rospy.Rate(20)  # 20 Hz
         ctrl_msg = Twist()
-        ctrl_msg.angular.z = 1
-        self.robot_ctrl_pub.publish(ctrl_msg)
-        rospy.sleep(0.1)
-        ctrl_msg.angular.z = 0
+        rate = rospy.Rate(20)  # 20 Hz
+        start_theta = self.current_position["theta"]
+        target_theta = angle_to_neg_pi_to_pi(start_theta + goal_theta)
+        prev_theta = start_theta
 
         while not rospy.is_shutdown():
-            v = -1 * self.angular_PID.control(theta_error, rospy.get_rostime())
-            ctrl_msg.angular.z = v
-            print("ang", theta_error, v)
+            curr_theta = self.current_position["theta"]
 
-            if abs(theta_error) < 0.1:
+            error = angle_to_neg_pi_to_pi(target_theta - curr_theta)
+            if abs(error) < 0.01:
                 break
-
+            w = self.angular_PID.control(error, rospy.get_rostime())
+            ctrl_msg.linear.x = 0
+            ctrl_msg.angular.z = w
+            print("ang", error, w)
             self.robot_ctrl_pub.publish(ctrl_msg)
+
+            dx = 0.0
+            dy = 0.0
+            dtheta = angle_to_neg_pi_to_pi(curr_theta - prev_theta)
+            self._particle_filter.move_by(dx, dy, dtheta)
+
+            prev_theta = curr_theta
+
             rate.sleep()
 
+        print("DONE")
         ctrl_msg.linear.x = 0
         ctrl_msg.angular.z = 0
         self.robot_ctrl_pub.publish(ctrl_msg)
-        print("DONE")
-        
+
+
 
         ######### Your code ends here #########
 
@@ -645,7 +670,7 @@ if __name__ == "__main__":
                 ######### Your code ends here #########
             elif uinput == "s": # backwards
                 ######### Your code starts here #########
-                controller.forward_action(0.5)
+                controller.forward_action(-0.5)
                 ######### Your code ends here #########
             else:
                 print("Invalid input")
