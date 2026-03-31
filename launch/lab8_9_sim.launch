@@ -6,7 +6,7 @@
     <arg name="z_pos" default="0.0"/>
 
     <include file="$(find gazebo_ros)/launch/empty_world.launch">
-        <arg name="world_name" value="$(find csci445l)/worlds/lab8_9.world"/>
+        <arg name="world_name" value="$(find lab-08-awesomesauce)/worlds/lab8_9.world"/>
         <arg name="paused" value="false"/>
         <!-- <arg name="paused" value="true"/> -->
         <arg name="use_sim_time" value="true"/>
@@ -29,7 +29,7 @@
         <param name="tf_prefix" value="$(arg multi_robot_name)"/>
     </node>
 
-    <node pkg="rviz" type="rviz" name="odometry_rviz" args="-d $(find csci445l)/rviz/development.rviz" />
+    <node pkg="rviz" type="rviz" name="odometry_rviz" args="-d $(find lab-08-awesomesauce)/rviz/development.rviz" />
 
     <!-- Launch your custom node -->
     <!-- <node pkg="csci445l" type="lab4.py" name="lab4" output="screen" /> -->
