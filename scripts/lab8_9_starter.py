@@ -315,7 +315,7 @@ class ParticleFilter:
         ######### Your code starts here #########
         for p in self.particles: 
             expected_z = self.map_.closest_distance((p.x, p.y), p.theta + scan_angle_in_rad) #
-            if expected_z is None or expected_x <= 0:
+            if expected_z is None or expected_z <= 0:
                 continue
             error = z - expected_z
             weight = scipy.stats.norm(0, measurement_variance).pdf(error)
@@ -570,6 +570,10 @@ class Controller:
         theta_error = goal_theta
         rate = rospy.Rate(20)  # 20 Hz
         ctrl_msg = Twist()
+        ctrl_msg.angular.z = 1
+        self.robot_ctrl_pub.publish(ctrl_msg)
+        rospy.sleep(0.1)
+        ctrl_msg.angular.z = 0
 
         while not rospy.is_shutdown():
             v = -1 * self.angular_PID.control(theta_error, rospy.get_rostime())
