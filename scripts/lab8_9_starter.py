@@ -31,6 +31,8 @@ POSITION_TYPE = Dict[str, float]
 
 # don't change this
 GOAL_THRESHOLD = 0.1
+MAX_ROT_VEL = 2.84
+MAX_LIN_VEL = 0.22
 
 
 def angle_to_0_to_2pi(angle: float) -> float:
@@ -357,6 +359,9 @@ class Controller:
         rospy.init_node("particle_filter_controller", anonymous=True)
         self._particle_filter = particle_filter
         self._particle_filter.visualize_particles()
+
+        self.angular_PID = PIDController(1, 0.2, 0.01, -1, 1, -1 * MAX_ROT_VEL, MAX_ROT_VEL)
+        self.linear_PID = PIDController(1, 0.5, 0.00, -0.3, 0.3, -1 * MAX_LIN_VEL, MAX_LIN_VEL)
 
         #
         rate = rospy.Rate(20)  # 20 Hz
