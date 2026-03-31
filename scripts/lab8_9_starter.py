@@ -315,6 +315,8 @@ class ParticleFilter:
         ######### Your code starts here #########
         for p in self.particles: 
             expected_z = self.map_.closest_distance((p.x, p.y), p.theta + scan_angle_in_rad) #
+            if expected_z is None or expected_x <= 0:
+                continue
             error = z - expected_z
             weight = scipy.stats.norm(0, measurement_variance).pdf(error)
             p.log_p += np.log(weight + 1e-9)
@@ -357,6 +359,7 @@ class Controller:
         self._particle_filter.visualize_particles()
 
         #
+        rate = rospy.Rate(20)  # 20 Hz
         self.current_position = None
         self.laserscan = None
         self.odom_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
@@ -366,7 +369,13 @@ class Controller:
         self.target_position_pub = rospy.Publisher("/waypoints", MarkerArray, queue_size=10)
 
         while ((self.current_position is None) or (self.laserscan is None)) and (not rospy.is_shutdown()):
+            if (self.current_position is None):
+                print("POS NONE")
+            if (self.laserscan is None):
+                print("LASER NONE")
+
             rospy.loginfo("waiting for odom and laserscan")
+            rospy.loginfo("GOT BOHT")
             rospy.sleep(0.1)
 
     def odom_callback(self, msg):
@@ -500,10 +509,22 @@ class Controller:
     def take_measurements(self):
         # Take measurement using LIDAR
         ######### Your code starts here #########
-        # NOTE: with more than 2 angles the particle filter will converge too quickly, so with high likelihood the
-        # correct neighborhood won't be found.
-        dist = self.laserscan_distances_to_point(self.waypoints[self.current_waypoint_idx], pi/10) # pi/6 = 30 degrees
-        return dist
+        scan = self.laserscan
+        if scan is None:
+            return
+
+        target_angles = [-np.deg2rad(15), 0, np.deg2rad(15)]
+
+        for angle in target_angles:
+            idx = int((angle - scan.angle_min) / scan.angle_increment)
+            if idx < 0 or idx >= len(scan.ranges):
+                continue
+            z = scan.ranges[idx]
+            if z == float('inf') or np.isnan(z):
+                continue
+            self._particle_filter.measure(z, angle)
+
+
         ######### Your code ends here #########
 
     def autonomous_exploration(self):
