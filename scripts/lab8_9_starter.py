@@ -242,10 +242,11 @@ class ParticleFilter:
         self.sigma_d = translation_variance
         self.sigma_theta = rotation_variance
         self.sigma_s = measurement_variance
+        self.map_ = map_
 
 
-        x_min, y_min = self.map_.bottom_left()
-        x_max, y_max = self.map_.top_right()
+        x_min, y_min = self.map_.bottom_left
+        x_max, y_max = self.map_.top_right
         x_center = (x_min + x_max) / 2
         y_center = (y_min + y_max) / 2
         x_sigma = (x_max - x_min) / 2
