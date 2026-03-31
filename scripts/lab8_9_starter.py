@@ -411,9 +411,8 @@ class Controller:
         ######### Your code starts here #########
         # NOTE: with more than 2 angles the particle filter will converge too quickly, so with high likelihood the
         # correct neighborhood won't be found.
-
-        x = 0 # delete me - needed to compile with ths function empty
-
+        z = self.lidar.get_distance(0)
+        return z
         ######### Your code ends here #########
 
     def autonomous_exploration(self):
@@ -426,7 +425,7 @@ class Controller:
         """
         # Robot autonomously explores environment while it localizes itself
         ######### Your code starts here #########
-
+        
         ######### Your code ends here #########
 
     def forward_action(self, distance: float):
