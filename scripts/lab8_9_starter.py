@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 from typing import Optional, Tuple, List, Dict
 from argparse import ArgumentParser
-from math import inf, sqrt, atan2, pi
+from math import inf, sqrt, atan2, pi, radians, atan2,isinf, cos, sin, degrees, hypot
 from time import sleep, time
 import queue
 import json
 import math
+import random
 from random import uniform
 import copy
 
@@ -412,14 +413,96 @@ class Controller:
         marker.color = ColorRGBA(0.0, 0.0, 1.0, 0.5)
         marker_array.markers.append(marker)
         self.target_position_pub.publish(marker_array)
+        
+    def map_to_new_range(x: float, a_low: float, a_high: float, b_low: float, b_high: float):
+        """Helper function to map a value from range [a_low, a_high] to [b_low, b_high]"""
+        y = (x - a_low) / (a_high - a_low) * (b_high - b_low) + b_low
+        return y
+    
+    def laserscan_distances_to_point(self, point: Dict, cone_angle: float, visualize: bool = False):
+        """Returns the laserscan distances within the cone of angle `cone_angle` centered about the line pointing from
+        the robots current position to the given point. Angles are in radians.
+
+        Notes:
+            1. Distances that are outside of the laserscan's minimum and maximum range are filterered out
+        """
+        curr_pos = self.current_position
+        # angle to point in the local frame. this is the same as the lidar frame. Not neccessarily in [-pi, pi] because
+        # of the theta subtraction
+        angle_to_point_local = angle_to_0_to_2pi(
+            atan2(point["y"] - curr_pos["y"], point["x"] - curr_pos["x"]) - curr_pos["theta"]
+        )
+        angle_low = angle_to_0_to_2pi(angle_to_point_local - cone_angle)
+        angle_high = angle_to_0_to_2pi(angle_to_point_local + cone_angle)
+
+        # This is the so called 'danger zone', because either the high or low angle has wrapped around. For example,
+        # when low = 355 deg, and high = 20 deg. The solution is to set the low to 0 and use the high when angle is > 0,
+        # or set the high to 2*pi and use the low when angle is < 2*pi
+        if angle_to_point_local < cone_angle or angle_to_point_local > 2 * pi - cone_angle:
+            if angle_to_point_local < cone_angle:
+                angle_low = 0
+                idx_low = 0
+                idx_high = int(
+                    map_to_new_range(
+                        angle_high, self.laserscan.angle_min, self.laserscan.angle_max, 0, len(self.laserscan.ranges)
+                    )
+                )
+            elif angle_to_point_local > 2 * pi - cone_angle:
+                angle_high = 2 * pi
+                idx_high = len(self.laserscan.ranges) - 1
+                idx_low = int(
+                    map_to_new_range(
+                        angle_low, self.laserscan.angle_min, self.laserscan.angle_max, 0, len(self.laserscan.ranges)
+                    )
+                )
+            else:
+                assert False, "should not reach here"
+        else:
+            idx_low = int(
+                map_to_new_range(
+                    angle_low, self.laserscan.angle_min, self.laserscan.angle_max, 0, len(self.laserscan.ranges)
+                )
+            )
+            idx_high = int(
+                map_to_new_range(
+                    angle_high, self.laserscan.angle_min, self.laserscan.angle_max, 0, len(self.laserscan.ranges)
+                )
+            )
+        assert angle_low < angle_high, f"angle_low: {angle_low}, angle_high: {angle_high}"
+        if idx_low > idx_high:
+            idx_low, idx_high = idx_high, idx_low
+        assert idx_low < idx_high, f"idx_low: {idx_low}, idx_high: {idx_high}"
+
+        raw = self.laserscan.ranges[idx_low:idx_high]
+        filtered = [r for r in raw if (r > self.laserscan.range_min and r < self.laserscan.range_max)]
+
+        if visualize:
+            # raw should include all ranges, even if they are inf, in the specified cone
+            #   i.e. something like `raw = self.laserscan.ranges[idx_low:idx_high]`
+            # `angle_low` and `angle_high` are the angles in the robots local frame
+            pcd = PointCloud()
+            pcd.header.frame_id = "odom"
+            pcd.header.stamp = rospy.Time.now()
+            for i, p in enumerate(raw):
+                if isinf(p):
+                    continue
+                angle_local = map_to_new_range(i, 0, len(raw), angle_low, angle_high)
+                angle = angle_local + curr_pos["theta"]
+                x = p * cos(angle) + curr_pos["x"]
+                y = p * sin(angle) + curr_pos["y"]
+                z = 0.1
+                pcd.points.append(Point32(x=x, y=y, z=z))
+                pcd.channels.append(ChannelFloat32(name="rgb", values=(0.0, 1.0, 0.0)))
+            self.pointcloud_pub.publish(pcd)
+        return filtered
 
     def take_measurements(self):
         # Take measurement using LIDAR
         ######### Your code starts here #########
         # NOTE: with more than 2 angles the particle filter will converge too quickly, so with high likelihood the
         # correct neighborhood won't be found.
-        z = self.lidar.get_distance(0)
-        return z
+        dist = self.laserscan_distances_to_point(self.waypoints[self.current_waypoint_idx], pi/10) # pi/6 = 30 degrees
+        return dist
         ######### Your code ends here #########
 
     def autonomous_exploration(self):
