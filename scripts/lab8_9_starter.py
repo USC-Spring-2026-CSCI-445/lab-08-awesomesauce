@@ -312,14 +312,21 @@ class ParticleFilter:
         # Calculate posterior probabilities and resample
         ######### Your code starts here #########
         for p in self.particles: 
-            expected_z = self.map.ray_cast(p, scan_angle_in_rad) #
+            expected_z = self.map_.closest_distance((p.x, p.y), p.theta + scan_angle_in_rad) #
             error = z - expected_z
             weight = scipy.stats.norm(0, measurement_variance).pdf(error)
-            weights.append(weight)
-        total = sum(weights)
-        weights = [w / total for w in weights]
-        indices = np.random.choice(len(self.particles), size=len(self.particles), p=weights)
-        self.particles = [self.particles[i] for i in indices]
+            p.log_p += np.log(weight + 1e-9)
+
+        log_weights = np.array([p.log_p for p in self.particles])
+        max_log = np.max(log_weights)
+        weights = np.exp(log_weights - max_log)
+        weights /= np.sum(weights)
+        new_particles = random.choices(self.particles, weights=weights,k=len(self.particles))
+        self.particles = []
+        for p in new_particles:
+            p.log_p = 0
+        self.particles = new_particles
+
         ######### Your code ends here #########
 
     def get_estimate(self) -> Tuple[float, float, float]:
@@ -432,7 +439,7 @@ class Controller:
     def forward_action(self, distance: float):
         # Robot moves forward by a set amount during manual control
         ######### Your code starts here #########
-        distance_error = float
+        distance_error = distance
         rate = rospy.Rate(20)  # 20 Hz
         ctrl_msg = Twist()
 
@@ -456,7 +463,7 @@ class Controller:
     def rotate_action(self, goal_theta: float):
         # Robot turns by a set amount during manual control
         ######### Your code starts here #########
-        theta_error = float
+        theta_error = goal_theta
         rate = rospy.Rate(20)  # 20 Hz
         ctrl_msg = Twist()
 
