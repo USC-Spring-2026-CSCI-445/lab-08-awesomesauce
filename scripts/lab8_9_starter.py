@@ -358,6 +358,14 @@ class Controller:
     def __init__(self, particle_filter: ParticleFilter):
         rospy.init_node("particle_filter_controller", anonymous=True)
         self._particle_filter = particle_filter
+        # create/override publishers after rospy.init_node so they are properly registered
+        self._particle_filter.particles_visualization_pub = rospy.Publisher(
+            "/pf_particles", PoseArray, queue_size=10
+        )
+        self._particle_filter.estimate_visualization_pub = rospy.Publisher(
+            "/pf_estimate", PoseStamped, queue_size=10
+        )
+        # publish initial visualization now that publishers are valid
         self._particle_filter.visualize_particles()
 
         self.angular_PID = PIDController(0.5, 0.2, 0.01, -1, 1, -1 * MAX_ROT_VEL, MAX_ROT_VEL)
