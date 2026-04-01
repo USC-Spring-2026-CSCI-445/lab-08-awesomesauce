@@ -550,7 +550,105 @@ class Controller:
         """
         # Robot autonomously explores environment while it localizes itself
         ######### Your code starts here #########
+        rate = rospy.Rate(1.0)
+        max_steps = 400
+        rotation_attempts = 0
+        move_distance = 0.25
         
+        for step in range(max_steps):
+            if rospy.is_shutdown():
+                break
+            
+            #nospin
+            if rotation_attempts>5:
+                rospy.loginfo("too many rotations")
+                self.forward_action(0.3)
+                rotation_attempts=0
+            
+            front_range = None
+            too_close = False
+            
+            if self.laserscan is not None:
+                angle_min = self.laserscan.angle_min
+                angle_inc = self.laserscan.angle_increment
+                ranges = self.laserscan.ranges
+                num_ranges = len(ranges)
+                
+                #look ahead
+                front_window_deg = 25.0
+                low_angle = -math.radians(front_window_deg)
+                high_angle=math.radians(front_window_deg)
+                
+                low_idx = int(round((low_angle - angle_min)/angle_inc))
+                high_idx = int(round((high_angle - angle_min)/angle_inc))
+                low_idx = max(0,min(low_idx,num_ranges-1))
+                high_idx = max(0,min(high_idx,num_ranges -1))
+                if low_idx > high_idx:
+                    low_idx,high_idx = high_idx,low_idx
+                
+                front_sector = [r for r in ranges[low_idx:high_idx+1]if not np.isinf(r)]
+                
+                #exact forward beam
+                zero_idx = int (round((0.0-angle_min)/angle_inc))
+                zero_idx = max(0,min(zero_idx,num_ranges-1))
+                front_range=ranges[zero_idx]
+                
+                #decide "too close" based on this sector only
+                if len(front_sector)>0 and min(front_sector)<0.28:
+                    close_count += 1
+                else:
+                    close_count = 0
+                
+                #require it to be close twice in row to react
+                if close_count >=2:
+                    too_close=True
+                    
+            if too_close:
+                rospy.loginfo("Too close, backing up")
+                self.forward_action(-0.12)
+                self.rotate_action(uniform(math.pi/5,math.pi/3))
+                rotation_attempts+=1
+                rate.sleep()
+                continue
+            
+            #main motion policy
+            if front_range is None or np.isinf(front_range) or front_range > 0.7:
+                # move forward more confidently if clear
+                self.forward_action(move_distance)
+                rotation_attempts=0
+            else:
+                rospy.loginfo("Obstacle ahead, rotating")
+                self.rotate_action(uniform(math.pi/4,math.pi/2))
+                rotation_attempts+=1
+            
+            # pf 
+            self.take_measurements()
+            
+            #visualize, check convergence
+            self._particle_filter.visualize_particles()
+            self._particle_filter.visualize_estimate()
+            
+            x_est, y_est, theta_est = self._particle_filter.get_estimate()
+            pts = np.array([[p.x,p.y] for p in self._particle_filter._particles])
+            if pts.shape[0]>0:
+                dists = np.linalg.norm(pts-np.array([x_est,y_est]), axis=1)
+                std_dev = np.std(dists)
+                rospy.loginfo(f"[Step {step}] Particle spread: {std_dev:.3f}")
+                
+                sensor_ok = False
+                if front_range is not None and not np.isinf(front_range):
+                    #predicted front range from PF estimate
+                    predicted_front = self._particle_filter.map_.cloest_distance((x_est,y_est),theta_est)
+                    if predicted_front is None:
+                        predicted_front = 10.0
+                    # if predicted ad actual are close, we believe the pose
+                    if abs(predicted_front - front_range) < 0.25:
+                        sensor_ok = True
+                    
+                if std_dev < 0.12 and sensor_ok:
+                    rospy.loginfo("Particle filter converged (std<0.12 and sensor matched).")
+                    break
+            rate.sleep()
         ######### Your code ends here #########
 
     def forward_action(self, distance: float):
