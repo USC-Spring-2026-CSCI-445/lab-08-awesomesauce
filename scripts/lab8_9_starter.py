@@ -308,7 +308,7 @@ class ParticleFilter:
             scan_angle_in_rad: Angle in the robots frame where the scan was taken
         """
         weights = []
-        # Calculate posterior probabilities and resample
+        # Calculate posterior probabilities 
         ######### Your code starts here #########
         for p in self.particles: 
             expected_z = self.map_.closest_distance((p.x, p.y), p.theta + scan_angle_in_rad) #
@@ -329,12 +329,12 @@ class ParticleFilter:
             p.log_p = 0
         self.particles = new_particles
 
-        x_min, y_min = self.map_.bottom_left
-        x_max, y_max = self.map_.top_right
-        n_inject = int(0.05 * len(self.particles))
-        inject_indices = random.sample(range(len(self.particles)), n_inject)
-        for i in inject_indices:
-            self.particles[i] = Particle(uniform(x_min, x_max), uniform(y_min, y_max), uniform(-pi, pi), 0.0)
+        # x_min, y_min = self.map_.bottom_left
+        # x_max, y_max = self.map_.top_right
+        # n_inject = int(0.05 * len(self.particles))
+        # inject_indices = random.sample(range(len(self.particles)), n_inject)
+        # for i in inject_indices:
+        #     self.particles[i] = Particle(uniform(x_min, x_max), uniform(y_min, y_max), uniform(-pi, pi), 0.0)
 
         ######### Your code ends here #########
 
@@ -643,7 +643,7 @@ class Controller:
                 sensor_ok = False
                 if front_range is not None and not np.isinf(front_range):
                     #predicted front range from PF estimate
-                    predicted_front = self._particle_filter.map_.cloest_distance((x_est,y_est),theta_est)
+                    predicted_front = self._particle_filter.map_.closest_distance((x_est,y_est),theta_est)
                     if predicted_front is None:
                         predicted_front = 10.0
                     # if predicted ad actual are close, we believe the pose
@@ -761,7 +761,7 @@ if __name__ == "__main__":
         map_aabb = map_["map_aabb"]
 
     map_ = Map(obstacles, map_aabb)
-    num_particles = 200
+    num_particles = 400
     translation_variance = 0.1
     rotation_variance = 0.05
     measurement_variance = 0.1
@@ -772,30 +772,30 @@ if __name__ == "__main__":
         # Manual control
         goal_theta = 0
         controller.take_measurements()
-        while not rospy.is_shutdown():
-            print("\nEnter 'a', 'w', 's', 'd' to move the robot:")
-            uinput = input("")
-            if uinput == "w": # forward
-                ######### Your code starts here #########
-                controller.forward_action(0.25)
-                ######### Your code ends here #########
-            elif uinput == "a": # left
-                ######### Your code starts here #########
-                controller.rotate_action(pi/4)
-                ######### Your code ends here #########
-            elif uinput == "d": #right
-                ######### Your code starts here #########
-                controller.rotate_action(-pi/4)
-                ######### Your code ends here #########
-            elif uinput == "s": # backwards
-                ######### Your code starts here #########
-                controller.forward_action(-0.25)
-                ######### Your code ends here #########
-            else:
-                print("Invalid input")
-            ######### Your code starts here #########
-            controller.take_measurements()
-            ######### Your code ends here #########
+        # while not rospy.is_shutdown():
+        #     print("\nEnter 'a', 'w', 's', 'd' to move the robot:")
+        #     uinput = input("")
+        #     if uinput == "w": # forward
+        #         ######### Your code starts here #########
+        #         controller.forward_action(0.25)
+        #         ######### Your code ends here #########
+        #     elif uinput == "a": # left
+        #         ######### Your code starts here #########
+        #         controller.rotate_action(pi/4)
+        #         ######### Your code ends here #########
+        #     elif uinput == "d": #right
+        #         ######### Your code starts here #########
+        #         controller.rotate_action(-pi/4)
+        #         ######### Your code ends here #########
+        #     elif uinput == "s": # backwards
+        #         ######### Your code starts here #########
+        #         controller.forward_action(-0.25)
+        #         ######### Your code ends here #########
+        #     else:
+        #         print("Invalid input")
+        #     ######### Your code starts here #########
+        #     controller.take_measurements()
+        #     ######### Your code ends here #########
 
         # Autonomous exploration
         ######### Your code starts here #########
