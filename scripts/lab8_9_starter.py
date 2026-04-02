@@ -316,7 +316,7 @@ class ParticleFilter:
                 continue
             error = z - expected_z
             weight = scipy.stats.norm(0, self.sigma_s).pdf(error)
-            p.log_p += np.log(weight + 1e-9)
+            p.log_p += 0.2 * np.log(weight + 1e-9)
 
     def resample(self):
         log_weights = np.array([p.log_p for p in self.particles])
@@ -560,6 +560,50 @@ class Controller:
         rotation_attempts = 0
         move_distance = 0.25
         
+        self.rotate_action(pi/4)
+        self.take_measurements()
+        self._particle_filter.visualize_particles()
+        self._particle_filter.visualize_estimate()
+
+        self.forward_action(0.75)
+        self.take_measurements()
+        self._particle_filter.visualize_particles()
+        self._particle_filter.visualize_estimate()
+        self.rotate_action(-pi/4)
+        self.take_measurements()
+        self._particle_filter.visualize_particles()
+        self._particle_filter.visualize_estimate()
+
+        self.forward_action(0.75)
+        self.take_measurements()
+        self._particle_filter.visualize_particles()
+        self._particle_filter.visualize_estimate()
+
+        self.rotate_action(pi/4)
+        self.take_measurements()
+        self._particle_filter.visualize_particles()
+        self._particle_filter.visualize_estimate()
+
+        self.forward_action(0.25)
+        self.take_measurements()
+        self._particle_filter.visualize_particles()
+        self._particle_filter.visualize_estimate()
+        self.forward_action(0.25)
+
+        self.take_measurements()
+        self._particle_filter.visualize_particles()
+        self._particle_filter.visualize_estimate()
+        self.rotate_action(pi)
+
+        self.take_measurements()
+        self._particle_filter.visualize_particles()
+        self._particle_filter.visualize_estimate()
+        self.rotate_action(pi)
+
+        self.take_measurements()
+        self._particle_filter.visualize_particles()
+        self._particle_filter.visualize_estimate()
+
         for step in range(max_steps):
             if rospy.is_shutdown():
                 break
@@ -567,7 +611,7 @@ class Controller:
             #nospin
             if rotation_attempts>5:
                 rospy.loginfo("too many rotations")
-                self.forward_action(0.3)
+                self.forward_action(0.6)
                 rotation_attempts=0
             
             front_range = None
@@ -609,7 +653,6 @@ class Controller:
                     too_close=True
                     
             if too_close:
-                rospy.loginfo("Too close, backing up")
                 self.forward_action(-0.12)
                 self.rotate_action(uniform(math.pi/5,math.pi/3))
                 rotation_attempts+=1
@@ -622,7 +665,6 @@ class Controller:
                 self.forward_action(move_distance)
                 rotation_attempts=0
             else:
-                rospy.loginfo("Obstacle ahead, rotating")
                 self.rotate_action(uniform(math.pi/4,math.pi/2))
                 rotation_attempts+=1
             
@@ -638,7 +680,6 @@ class Controller:
             if pts.shape[0]>0:
                 dists = np.linalg.norm(pts-np.array([x_est,y_est]), axis=1)
                 std_dev = np.std(dists)
-                rospy.loginfo(f"[Step {step}] Particle spread: {std_dev:.3f}")
                 
                 sensor_ok = False
                 if front_range is not None and not np.isinf(front_range):
@@ -650,9 +691,9 @@ class Controller:
                     if abs(predicted_front - front_range) < 0.25:
                         sensor_ok = True
                     
-                if std_dev < 0.12 and sensor_ok:
-                    rospy.loginfo("Particle filter converged (std<0.12 and sensor matched).")
-                    break
+                # if std_dev < 0.12 and sensor_ok:
+                #     rospy.loginfo("Particle filter converged (std<0.12 and sensor matched).")
+                #     break
             rate.sleep()
         ######### Your code ends here #########
 
