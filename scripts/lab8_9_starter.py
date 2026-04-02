@@ -250,16 +250,11 @@ class ParticleFilter:
 
         x_min, y_min = self.map_.bottom_left
         x_max, y_max = self.map_.top_right
-        x_center = (x_min + x_max) / 2
-        y_center = (y_min + y_max) / 2
-        x_sigma = (x_max - x_min) / 2
-        y_sigma = (y_max - y_min) / 2
-
         self.particles = []
         for _ in range(n_particles):
-            x = np.random.normal(x_center, x_sigma)
-            y = np.random.normal(y_center, y_sigma)
-            theta = np.random.normal(0, np.pi)
+            x = uniform(x_min, x_max)
+            y = uniform(y_min, y_max)
+            theta = uniform(-np.pi, np.pi)
 
             x = np.clip(x, x_min, x_max)
             y = np.clip(y, y_min, y_max)
@@ -294,15 +289,15 @@ class ParticleFilter:
 
         # Propagate motion of each particle
         ######### Your code starts here #########
+        d = math.sqrt(delta_x**2 + delta_y**2)
         for p in self.particles: 
-            dx_noise = delta_x + np.random.normal(0, self.sigma_d)
-            dy_noise = delta_y + np.random.normal(0, self.sigma_d)
-            d_theta_noise = delta_theta + np.random.normal(0, self.sigma_theta)
+            noisy_dtheta = delta_theta + np.random.normal(0, self.sigma_theta)
+            if (d > 1e-6):
+                noisy_d = d + np.random.normal(0, self.sigma_d)
+                p.x += noisy_d * math.cos(p.theta)
+                p.y += noisy_d * math.sin(p.theta)
+            p.theta = angle_to_neg_pi_to_pi(p.theta + noisy_dtheta)
 
-            p.x = p.x + dx_noise*math.cos(delta_theta)
-            p.y = p.y + dy_noise*math.sin(delta_theta)
-            p.theta += d_theta_noise
-            p.theta = angle_to_neg_pi_to_pi(p.theta)
         ######### Your code ends here #########
 
     def measure(self, z: float, scan_angle_in_rad: float):
@@ -320,18 +315,26 @@ class ParticleFilter:
             if expected_z is None or expected_z <= 0:
                 continue
             error = z - expected_z
-            weight = scipy.stats.norm(0, measurement_variance).pdf(error)
+            weight = scipy.stats.norm(0, self.sigma_s).pdf(error)
             p.log_p += np.log(weight + 1e-9)
 
+    def resample(self):
         log_weights = np.array([p.log_p for p in self.particles])
         max_log = np.max(log_weights)
         weights = np.exp(log_weights - max_log)
         weights /= np.sum(weights)
-        new_particles = random.choices(self.particles, weights=weights,k=len(self.particles))
+        new_particles = [copy.deepcopy(p) for p in random.choices(self.particles, weights=weights, k=len(self.particles))]
         self.particles = []
         for p in new_particles:
             p.log_p = 0
         self.particles = new_particles
+
+        x_min, y_min = self.map_.bottom_left
+        x_max, y_max = self.map_.top_right
+        n_inject = int(0.05 * len(self.particles))
+        inject_indices = random.sample(range(len(self.particles)), n_inject)
+        for i in inject_indices:
+            self.particles[i] = Particle(uniform(x_min, x_max), uniform(y_min, y_max), uniform(-pi, pi), 0.0)
 
         ######### Your code ends here #########
 
@@ -369,7 +372,7 @@ class Controller:
         self._particle_filter.visualize_particles()
 
         self.angular_PID = PIDController(0.5, 0.2, 0.01, -1, 1, -1 * MAX_ROT_VEL, MAX_ROT_VEL)
-        self.linear_PID = PIDController(0.5, 0.5, 0.00, -0.3, 0.3, -1 * MAX_LIN_VEL, MAX_LIN_VEL)
+        self.linear_PID = PIDController(0.5, 0.5, 0.01, -0.3, 0.3, -1 * MAX_LIN_VEL, MAX_LIN_VEL)
 
         #
         rate = rospy.Rate(20)  # 20 Hz
@@ -526,7 +529,7 @@ class Controller:
         if scan is None:
             return
 
-        target_angles = [-np.deg2rad(15), 0, np.deg2rad(15)]
+        target_angles = np.linspace(-pi, pi, 8, endpoint=False)
 
         for angle in target_angles:
             idx = int((angle - scan.angle_min) / scan.angle_increment)
@@ -537,7 +540,9 @@ class Controller:
                 continue
             self._particle_filter.measure(z, angle)
 
-
+        self._particle_filter.resample()
+        self._particle_filter.visualize_particles()
+        self._particle_filter.visualize_estimate()
         ######### Your code ends here #########
 
     def autonomous_exploration(self):
@@ -629,7 +634,7 @@ class Controller:
             self._particle_filter.visualize_estimate()
             
             x_est, y_est, theta_est = self._particle_filter.get_estimate()
-            pts = np.array([[p.x,p.y] for p in self._particle_filter._particles])
+            pts = np.array([[p.x,p.y] for p in self._particle_filter.particles])
             if pts.shape[0]>0:
                 dists = np.linalg.norm(pts-np.array([x_est,y_est]), axis=1)
                 std_dev = np.std(dists)
@@ -658,6 +663,7 @@ class Controller:
         rate = rospy.Rate(20)  # 20 Hz
         start_x = self.current_position["x"]
         start_y = self.current_position["y"]
+        start_theta = self.current_position["theta"]
         prev_x = start_x
         prev_y = start_y
 
@@ -665,12 +671,17 @@ class Controller:
             curr_x = self.current_position["x"]
             curr_y = self.current_position["y"]
             traveled = abs(math.sqrt((curr_x - start_x) ** 2 + (curr_y - start_y) ** 2))
-            error = distance - traveled if distance > 0 else traveled - distance
+            error = abs(distance) - traveled
             if abs(error) < 0.1:
                 break
 
             v = self.linear_PID.control(error, rospy.get_rostime())
-            ctrl_msg.linear.x = v
+            ctrl_msg.linear.x = v if distance >= 0 else -v
+            
+            heading_error = angle_to_neg_pi_to_pi(start_theta - self.current_position["theta"])
+            ctrl_msg.angular.z = self.angular_PID.control(heading_error, rospy.get_rostime())
+
+
             ctrl_msg.linear.z = 0.0
             print("lin", error, v)
             self.robot_ctrl_pub.publish(ctrl_msg)
@@ -678,7 +689,6 @@ class Controller:
             dx = curr_x - prev_x
             dy = curr_y - prev_y
             dtheta = 0
-            self._particle_filter.move_by(dx, dy, dtheta)
 
             prev_x = curr_x
             prev_y = curr_y
@@ -686,6 +696,9 @@ class Controller:
             rate.sleep()
 
         print("DONE")
+        total_d = math.sqrt((curr_x - start_x)**2 + (curr_y - start_y)**2)
+        signed_d = total_d if distance >= 0 else -total_d
+        self._particle_filter.move_by(signed_d * math.cos(start_theta), signed_d * math.sin(start_theta), 0.0)
         ctrl_msg.linear.x = 0
         ctrl_msg.angular.z = 0
         self.robot_ctrl_pub.publish(ctrl_msg)
@@ -704,7 +717,7 @@ class Controller:
             curr_theta = self.current_position["theta"]
 
             error = angle_to_neg_pi_to_pi(target_theta - curr_theta)
-            if abs(error) < 0.01:
+            if abs(error) < 0.1:
                 break
             w = self.angular_PID.control(error, rospy.get_rostime())
             ctrl_msg.linear.x = 0
@@ -714,8 +727,6 @@ class Controller:
 
             dx = 0.0
             dy = 0.0
-            dtheta = angle_to_neg_pi_to_pi(curr_theta - prev_theta)
-            self._particle_filter.move_by(dx, dy, dtheta)
 
             prev_theta = curr_theta
 
@@ -725,6 +736,8 @@ class Controller:
         ctrl_msg.linear.x = 0
         ctrl_msg.angular.z = 0
         self.robot_ctrl_pub.publish(ctrl_msg)
+        total_dtheta = angle_to_neg_pi_to_pi(self.current_position["theta"] - start_theta)
+        self._particle_filter.move_by(0, 0, total_dtheta)
 
 
 
@@ -764,19 +777,19 @@ if __name__ == "__main__":
             uinput = input("")
             if uinput == "w": # forward
                 ######### Your code starts here #########
-                controller.forward_action(0.5)
+                controller.forward_action(0.25)
                 ######### Your code ends here #########
             elif uinput == "a": # left
                 ######### Your code starts here #########
-                controller.rotate_action(pi/2)
+                controller.rotate_action(pi/4)
                 ######### Your code ends here #########
             elif uinput == "d": #right
                 ######### Your code starts here #########
-                controller.rotate_action(-pi/2)
+                controller.rotate_action(-pi/4)
                 ######### Your code ends here #########
             elif uinput == "s": # backwards
                 ######### Your code starts here #########
-                controller.forward_action(-0.5)
+                controller.forward_action(-0.25)
                 ######### Your code ends here #########
             else:
                 print("Invalid input")
